@@ -211,14 +211,22 @@ function pubView() {
     var p = dparts(f.start_date), tl = tasksOf(f.id);
     var mon = p ? new Date(p[0], p[1] - 1, p[2]).toLocaleDateString("en-GB", { month: "short" }) : "";
     var range = fmtDate(f.start_date) + (f.end_date && f.end_date !== f.start_date ? " to " + fmtDate(f.end_date) : "");
-    h += '<section class="fest">' + (f.image_url ? '<img class="banner" src="' + esc(f.image_url) + '" alt="' + esc(f.name) + '" loading="lazy">' : "") +
-      '<div class="fest-head">' + (p ? '<div class="dtile"><b>' + p[2] + "</b><span>" + esc(mon) + "</span></div>" : "") +
+    var fkey = "f:" + f.id, fopen = S.open.has(fkey), spots = 0, mine = 0;
+    tl.forEach(function (t) { taskSlots(t).forEach(function (x) { var k = t.id + ":" + x.idx; spots += Math.max((+t.needed || 1) - taken(k), 0); if (S.sel.has(k)) mine++; }); });
+    var summary = tl.length ? plural(tl.length, "service", "services") + " · " + (f.is_open ? plural(spots, "spot", "spots") + " left" : "sign-ups closed") + (mine ? " · " + mine + " selected" : "") : "Services coming soon";
+    h += '<section class="fest' + (fopen ? " open" : "") + '">' + (f.image_url ? '<img class="banner" src="' + esc(f.image_url) + '" alt="' + esc(f.name) + '" loading="lazy">' : "") +
+      '<div class="fest-head" data-act="fold" data-key="' + esc(fkey) + '">' + (p ? '<div class="dtile"><b>' + p[2] + "</b><span>" + esc(mon) + "</span></div>" : "") +
       '<div><p class="eyebrow">' + esc(range) + "</p><h2>" + esc(f.name) + "</h2>" +
       (f.description ? '<p class="desc">' + esc(f.description) + "</p>" : "") +
-      (f.is_open ? "" : '<p style="margin-top:.5rem"><span class="pill warn">Sign-ups are closed</span></p>') + "</div></div>";
-    if (!tl.length) h += '<div class="empty">Seva for this festival will be listed soon.</div>';
-    h += foldTools("p", tl.map(function (t) { return t.id; }));
-    tl.forEach(function (t) { h += taskCard(t, f, idx); });
+      (f.is_open ? "" : '<p style="margin-top:.5rem"><span class="pill warn">Sign-ups are closed</span></p>') + "</div></div>" +
+      '<button type="button" class="fest-toggle" data-act="fold" data-key="' + esc(fkey) + '" aria-expanded="' + fopen + '"><span>' + (fopen ? "Hide services" : "Show services and sign up") + '</span><span class="meta">' + esc(summary) + '</span><span class="chev" aria-hidden="true"></span></button>';
+    if (fopen) {
+      h += '<div class="fest-body">';
+      if (!tl.length) h += '<div class="empty">Seva for this festival will be listed soon.</div>';
+      h += foldTools("p", tl.map(function (t) { return t.id; }));
+      tl.forEach(function (t) { h += taskCard(t, f, idx); });
+      h += "</div>";
+    }
     h += "</section>";
   });
   return h;
