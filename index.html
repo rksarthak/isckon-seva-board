@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Seva Board</title>
+<meta name="description" content="Sign up for seva at ISKCON Amsterdam Temple festivals.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">ISKCON Amsterdam Temple</p>
+      <h1>Seva Board</h1>
+    </div>
+    <div class="seg" id="modeSwitch" hidden>
+      <button type="button" data-act="mode" data-mode="public" aria-pressed="true">Volunteer view</button>
+      <button type="button" data-act="mode" data-mode="admin" aria-pressed="false">Admin</button>
+    </div>
+  </header>
+  <main id="app"><div class="empty">Loading festivals…</div></main>
+  <footer class="foot" id="foot"></footer>
+</div>
+<div id="bar" class="bar" hidden></div>
+<div id="modal"></div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="config.js"></script>
+<script>
+  /* Loads the Supabase library (or the built-in demo storage when config.js says DEMO). */
+  document.write('<script src="' + (window.SEVA_CONFIG && window.SEVA_CONFIG.DEMO
+    ? 'demo-backend.js'
+    : 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js') + '"><\/script>');
+</script>
+<script src="app.js"></script>
+</body>
+</html>
