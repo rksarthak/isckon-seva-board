@@ -1,8 +1,8 @@
 // Fill in the two Supabase values (README, step 3), then save this file.
 // The "anon" key is meant to be public. Never paste the "service_role" key here.
 window.SEVA_CONFIG = {
-  SUPABASE_URL: "https://YOUR-PROJECT-ID.supabase.co",
-  SUPABASE_ANON_KEY: "YOUR-ANON-PUBLIC-KEY",
+  SUPABASE_URL: "https://pxbcljgvfuackdmecpyp.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_9OYAGgOMENi0YvLCB70XRw_RRJLuFoC",
 
   // Used to turn numbers typed like 06 12345678 into +31 6 12345678 for WhatsApp. 31 = Netherlands.
   DEFAULT_COUNTRY_CODE: "31",
