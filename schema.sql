@@ -139,6 +139,14 @@ revoke all on public.admin_invites   from anon, authenticated;
 revoke all on public.signup_throttle from anon, authenticated;
 revoke insert, update, delete on public.admins from anon, authenticated;
 
+-- Newer Supabase projects do not give the API roles access to new tables automatically, so grant it here.
+-- The row-level security policies above still decide who can see or change which rows.
+grant usage on schema public to anon, authenticated;
+grant select on public.festivals, public.tasks to anon, authenticated;
+grant insert, update, delete on public.festivals, public.tasks to authenticated;
+grant select, delete on public.volunteers, public.signups to authenticated;
+grant select on public.admins to authenticated;
+
 -- ----------------------------------- remove contact details nobody needs
 
 -- When a volunteer has no sign-ups left (a seva or festival was deleted, or an admin removed them),
