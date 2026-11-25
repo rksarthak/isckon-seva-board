@@ -58,7 +58,7 @@ COMMON.forEach(function (c) { COMMON_BY_NAME[c[0]] = c; });
 var S = {
   festivals: [], tasks: [], counts: new Map(), volunteers: new Map(), signups: [], admins: [], invites: [],
   user: null, isAdmin: false, loaded: false, err: "", mode: "public", tab: "overview", af: null,
-  sel: new Set(), open: new Set(), cleanSel: new Set(), exportScope: "festival", submitting: false
+  sel: new Set(), open: new Set(), cleanSel: new Set(), exportScope: "all", submitting: false
 };
 
 function $(s) { return document.querySelector(s); }
@@ -287,14 +287,6 @@ function renderBar() {
 
 /* ----------------------------------------------------- admin view */
 
-function curFest() {
-  var fs = sortedFests();
-  if (!fs.length) return null;
-  if (S.afWant) { var w = fs.find(function (x) { return x.id === S.afWant; }); if (w) { S.af = w.id; S.afWant = null; } }
-  var f = fs.find(function (x) { return x.id === S.af; });
-  if (!f) { f = fs.find(function (x) { return !isFinished(x); }) || fs[fs.length - 1]; if (!S.afWant) S.af = f.id; }
-  return f;
-}
 function adminView() {
   if (!S.isAdmin) return '<div class="note warn">Please sign in as an admin first.</div>';
   if (S.err) return '<div class="note warn">' + esc(S.err) + "</div>";
@@ -305,17 +297,31 @@ function adminView() {
   }).join("") + "</nav>";
   if (S.tab === "team") return h + teamTab();
   if (S.tab === "cleanup") return h + cleanupTab();
-  var f = curFest();
-  h += '<div class="fpick">' + sortedFests().map(function (x) {
-    return '<button type="button" data-act="pickFest" data-id="' + esc(x.id) + '" aria-pressed="' + (f && f.id === x.id) + '">' + esc(x.name) + (isFinished(x) ? " (finished)" : "") + "</button>";
-  }).join("") + '<button type="button" class="btn small" data-act="newFest">+ New festival</button></div>';
-  if (!f) {
+  var fs = sortedFests();
+  h += '<div class="row fold-tools"><button type="button" class="btn small primary" data-act="newFest">+ New festival</button>' +
+    (fs.length > 1 ? '<button type="button" class="btn small" data-act="foldAll" data-prefix="af:' + S.tab + '" data-open="1" data-ids="' + esc(fs.map(function (x) { return x.id; }).join(",")) + '">Expand all</button>' +
+    '<button type="button" class="btn small" data-act="foldAll" data-prefix="af:' + S.tab + '" data-open="0" data-ids="' + esc(fs.map(function (x) { return x.id; }).join(",")) + '">Collapse all</button>' : "") + "</div>";
+  if (!fs.length) {
     return h + '<div class="empty"><p><b>Start with your first festival.</b></p><p style="margin-top:.3rem">Pick a ready-made event such as Janmashtami or Ratha Yatra, or enter your own. The usual seva list can be added automatically.</p>' +
       '<p style="margin-top:.8rem"><button type="button" class="btn primary" data-act="newFest">Create a festival</button></p></div>';
   }
-  if (S.tab === "plan") return h + planTab(f);
-  if (S.tab === "people") return h + peopleTab(f);
-  return h + overviewTab(f);
+  if (S.tab === "people") h += exportPanel();
+  fs.forEach(function (f) { h += festSection(f); });
+  return h;
+}
+function festSummary(f) {
+  var tl = tasksOf(f.id), cap = 0, filled = 0;
+  tl.forEach(function (t) { var x = taskTotals(t); cap += x.cap; filled += x.filled; });
+  return plural(tl.length, "service", "services") + " · " + (cap ? Math.round(100 * filled / cap) : 0) + "% filled · " + plural(festPeopleCount(f), "volunteer", "volunteers");
+}
+function festSection(f) {
+  var key = "af:" + S.tab + ":" + f.id, open = S.open.has(key), p = dparts(f.start_date);
+  var range = fmtDate(f.start_date) + (f.end_date && f.end_date !== f.start_date ? " to " + fmtDate(f.end_date) : "");
+  var body = S.tab === "plan" ? planTab(f) : (S.tab === "people" ? peopleTab(f) : overviewTab(f));
+  return '<section class="afest' + (open ? " open" : "") + '"><button type="button" class="fold" data-act="fold" data-key="' + esc(key) + '" aria-expanded="' + open + '">' +
+    '<span class="fold-main"><b class="fold-title">' + esc(f.name) + '</b><span class="when mono">' + esc(range) + '</span><span class="meta" style="margin:0">' + esc(festSummary(f)) + "</span></span>" +
+    '<span class="fold-side">' + (isFinished(f) ? '<span class="pill">Finished</span>' : (f.is_open ? '<span class="pill ok">Sign-ups open</span>' : '<span class="pill warn">Sign-ups closed</span>')) + '</span><span class="chev" aria-hidden="true"></span></button>' +
+    (open ? '<div class="afest-body">' + body + "</div>" : "") + "</section>";
 }
 function festPeopleCount(f) {
   var ids = new Set(), tids = new Set(tasksOf(f.id).map(function (t) { return t.id; }));
@@ -357,8 +363,8 @@ function planTab(f) {
     '<button type="button" class="btn small danger" data-act="delFest" data-id="' + esc(f.id) + '">Delete</button></div></div>' +
     (f.description ? '<p class="tdesc">' + esc(f.description) + "</p>" : "") + "</div></div></article>";
   h += '<h3 style="margin:1.4rem 0 .6rem">Add a service</h3><p class="meta" style="margin-bottom:.6rem">Pick a common one to start from, then adjust the day, times and number of people.</p><div class="row" style="margin-bottom:1.2rem">' +
-    COMMON.map(function (c, i) { return '<button type="button" class="btn small" data-act="addCommon" data-i="' + i + '">' + esc(c[0]) + "</button>"; }).join("") +
-    '<button type="button" class="btn small primary" data-act="addCustom">+ Custom service</button></div>';
+    COMMON.map(function (c, i) { return '<button type="button" class="btn small" data-act="addCommon" data-fid="' + esc(f.id) + '" data-i="' + i + '">' + esc(c[0]) + "</button>"; }).join("") +
+    '<button type="button" class="btn small primary" data-act="addCustom" data-fid="' + esc(f.id) + '">+ Custom service</button></div>';
   h += '<h3 style="margin:1.4rem 0 .6rem">Services in this festival</h3>';
   if (!tl.length) return h + '<div class="empty">Nothing listed yet.</div>';
   tl.forEach(function (t) {
@@ -382,8 +388,8 @@ function volunteersOf(t) {
   return out.sort(function (a, b) { return String(a.c && a.c.name).localeCompare(String(b.c && b.c.name)); });
 }
 function scopedRows() {
-  var f = curFest(), rows = [];
-  S.festivals.filter(function (x) { return S.exportScope === "all" || (f && x.id === f.id); }).forEach(function (fe) {
+  var rows = [];
+  S.festivals.filter(function (x) { return S.exportScope === "all" || x.id === S.exportScope; }).forEach(function (fe) {
     tasksOf(fe.id).forEach(function (t) { volunteersOf(t).forEach(function (v) { if (v.c) rows.push({ f: fe, t: t, v: v }); }); });
   });
   return rows;
@@ -400,15 +406,19 @@ function uniqueContacts(rows) {
   });
   return Array.from(map.values()).sort(function (a, b) { return a.name.localeCompare(b.name); });
 }
-function peopleTab(f) {
-  var tl = tasksOf(f.id), rows = scopedRows(), people = uniqueContacts(rows);
-  var h = '<div class="panel"><h3>Export for WhatsApp groups</h3><p class="meta" style="margin:0 0 .7rem">' + plural(people.length, "person", "people") + " in " + (S.exportScope === "all" ? "all festivals" : esc(f.name)) + ".</p>" +
-    '<div class="row" style="margin-bottom:.7rem"><label for="ex-scope" class="meta" style="margin:0">Include</label><select id="ex-scope" class="sel-inline" data-act="scope"><option value="festival"' + (S.exportScope === "festival" ? " selected" : "") + ">This festival only</option><option value=\"all\"" + (S.exportScope === "all" ? " selected" : "") + ">All festivals</option></select></div>" +
+function exportPanel() {
+  var rows = scopedRows(), people = uniqueContacts(rows), cur = S.festivals.find(function (x) { return x.id === S.exportScope; });
+  var opts = '<option value="all"' + (S.exportScope === "all" ? " selected" : "") + ">All festivals</option>" + sortedFests().map(function (x) { return '<option value="' + esc(x.id) + '"' + (S.exportScope === x.id ? " selected" : "") + ">" + esc(x.name) + "</option>"; }).join("");
+  return '<div class="panel"><h3>Export for WhatsApp groups</h3><p class="meta" style="margin:0 0 .7rem">' + plural(people.length, "person", "people") + " in " + (cur ? esc(cur.name) : "all festivals") + ".</p>" +
+    '<div class="row" style="margin-bottom:.7rem"><label for="ex-scope" class="meta" style="margin:0">Include</label><select id="ex-scope" class="sel-inline" data-act="scope">' + opts + "</select></div>" +
     '<div class="tools" style="margin:0"><button type="button" class="btn primary" data-act="csvContacts">Download names + WhatsApp numbers (CSV)</button>' +
     '<button type="button" class="btn" data-act="vcf">Download contacts (.vcf)</button>' +
     '<button type="button" class="btn" data-act="csvFull">Download full list per seva (CSV)</button>' +
     '<button type="button" class="btn" data-act="copyNumbers">Copy names + numbers</button><button type="button" class="btn" data-act="copyMails">Copy emails</button></div>' +
     '<p class="meta" style="margin-top:.7rem">Tip: open the .vcf file on your phone to add everyone to your contacts, then create the WhatsApp group from there.</p></div>';
+}
+function peopleTab(f) {
+  var tl = tasksOf(f.id), h = "";
   if (!tl.length) return h + '<div class="empty">No seva listed for this festival yet.</div>';
   tl.forEach(function (t) {
     var vs = volunteersOf(t);
@@ -659,6 +669,7 @@ async function photoValue(prefix, old, maxW) {
   return old || null;
 }
 
+function addSevaWanted() { var c = $("#ff-addseva"), t = $("#ff-tpl"); return !!(c && c.checked && t && t.value); }
 function festForm(f) {
   f = f || {};
   var tpl = f.id ? "" : '<label for="ff-tpl">Start from a ready-made event</label><select id="ff-tpl"><option value="">Custom (enter everything myself)</option>' +
@@ -690,7 +701,7 @@ async function saveFest() {
     d.image_url = await photoValue("ff", old && old.image_url, 1600);
     var r = id ? await sb.from("festivals").update(d).eq("id", id).select().single() : await sb.from("festivals").insert(d).select().single();
     if (r.error) throw r.error;
-    S.afWant = r.data.id;
+    S.open.add("af:" + ((!id && addSevaWanted()) ? "plan" : S.tab) + ":" + r.data.id);
     if (!id && addSeva) {
       var ev = EVENTS.find(function (x) { return x.id === tplId; }), rows = [];
       ev.seva.forEach(function (n) {
@@ -760,7 +771,7 @@ function saveFile(name, text, type) {
 }
 function fileSlug(s) { return String(s || "volunteers").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-").toLowerCase() || "volunteers"; }
 function exportName(kind) {
-  var f = curFest(); return fileSlug(S.exportScope === "all" || !f ? "all-festivals" : f.name) + "-" + kind;
+  var f = S.festivals.find(function (x) { return x.id === S.exportScope; }); return fileSlug(f ? f.name : "all-festivals") + "-" + kind;
 }
 function csvContacts(rows) {
   var out = [["Name", "WhatsApp (international)", "WhatsApp (as entered)", "Email", "Festival", "Seva"].map(csvCell).join(",")];
@@ -805,14 +816,13 @@ async function doCleanDelete() {
 
 document.addEventListener("click", function (ev) {
   var el = ev.target.closest("[data-act]"); if (!el) return;
-  var a = el.dataset.act, f = S.mode === "admin" ? curFest() : null;
+  var a = el.dataset.act, f = el.dataset.fid ? { id: el.dataset.fid } : null;
   if (el.tagName === "SELECT" || (el.tagName === "INPUT" && el.type === "checkbox" && a === "cleanSel")) return;
   if (a === "close") { closeModal(); return; }
   if (a === "mode") { S.mode = el.dataset.mode; render(); return; }
   if (a === "fold") { var fk = el.dataset.key; if (S.open.has(fk)) S.open.delete(fk); else S.open.add(fk); render(); return; }
   if (a === "foldAll") { el.dataset.ids.split(",").forEach(function (i) { var k3 = el.dataset.prefix + ":" + i; if (el.dataset.open === "1") S.open.add(k3); else S.open.delete(k3); }); render(); return; }
   if (a === "tab") { S.tab = el.dataset.tab; render(); return; }
-  if (a === "pickFest") { S.af = el.dataset.id; render(); return; }
   if (a === "toggle") { var k = el.dataset.key; if (S.sel.has(k)) S.sel.delete(k); else S.sel.add(k); render(); return; }
   if (a === "clearSel") { S.sel.clear(); render(); return; }
   if (a === "signup") { openSignup(); return; }
