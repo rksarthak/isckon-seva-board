@@ -58,7 +58,7 @@ COMMON.forEach(function (c) { COMMON_BY_NAME[c[0]] = c; });
 var S = {
   festivals: [], tasks: [], counts: new Map(), volunteers: new Map(), signups: [], admins: [], invites: [],
   user: null, isAdmin: false, loaded: false, err: "", mode: "public", tab: "overview", af: null,
-  sel: new Set(), cleanSel: new Set(), exportScope: "festival", submitting: false
+  sel: new Set(), open: new Set(), cleanSel: new Set(), exportScope: "festival", submitting: false
 };
 
 function $(s) { return document.querySelector(s); }
@@ -217,6 +217,7 @@ function pubView() {
       (f.description ? '<p class="desc">' + esc(f.description) + "</p>" : "") +
       (f.is_open ? "" : '<p style="margin-top:.5rem"><span class="pill warn">Sign-ups are closed</span></p>') + "</div></div>";
     if (!tl.length) h += '<div class="empty">Seva for this festival will be listed soon.</div>';
+    h += foldTools("p", tl.map(function (t) { return t.id; }));
     tl.forEach(function (t) { h += taskCard(t, f, idx); });
     h += "</section>";
   });
@@ -226,6 +227,18 @@ function conflictWith(k, idx) {
   var a = idx.get(k), hit = null;
   S.sel.forEach(function (j) { if (hit || j === k) return; var b = idx.get(j); if (b && a.as < b.ae && b.as < a.ae) hit = b.task.name; });
   return hit;
+}
+function foldCard(key, cls, title, when, pills, body) {
+  var open = S.open.has(key);
+  return '<article class="task fold-card' + (cls ? " " + cls : "") + (open ? " open" : "") + '"><button type="button" class="fold" data-act="fold" data-key="' + esc(key) + '" aria-expanded="' + open + '">' +
+    '<span class="fold-main"><b class="fold-title">' + esc(title) + '</b><span class="when mono">' + esc(when) + '</span></span>' +
+    '<span class="fold-side">' + pills + '</span><span class="chev" aria-hidden="true"></span></button>' +
+    (open ? '<div class="fold-body">' + body + "</div>" : "") + "</article>";
+}
+function foldTools(prefix, ids) {
+  if (ids.length < 2) return "";
+  return '<div class="row fold-tools"><button type="button" class="btn small" data-act="foldAll" data-prefix="' + prefix + '" data-open="1" data-ids="' + esc(ids.join(",")) + '">Expand all</button>' +
+    '<button type="button" class="btn small" data-act="foldAll" data-prefix="' + prefix + '" data-open="0" data-ids="' + esc(ids.join(",")) + '">Collapse all</button></div>';
 }
 function taskCard(t, f, idx) {
   var need = +t.needed || 1, sl = taskSlots(t), tot = taskTotals(t), allFull = true;
@@ -243,15 +256,16 @@ function taskCard(t, f, idx) {
     return '<button type="button" class="chip st-' + st + '" data-act="toggle" data-key="' + esc(k) + '" aria-pressed="' + selected + '"' + (dis ? " disabled" : "") + (title ? ' title="' + esc(title) + '"' : "") + ">" +
       '<span class="ct mono">' + fmtT(s.s) + "–" + fmtT(s.e) + '</span><span class="cs">' + label + "</span></button>";
   }).join("");
-  var pct = tot.cap ? Math.round(100 * tot.filled / tot.cap) : 0;
-  var pill = allFull ? '<span class="pill">Fully booked</span>' : '<span class="pill acc">' + fmtH(tot.cap - tot.filled) + " hours still needed</span>";
-  return '<article class="task' + (allFull ? " is-full" : "") + '"><div class="task-top">' +
-    (t.image_url ? '<img class="thumb" src="' + esc(t.image_url) + '" alt="" loading="lazy">' : "") +
-    '<div class="task-main"><div class="task-head"><div><h3>' + esc(t.name) + '</h3><p class="when mono">' + esc(fmtDate(t.task_date)) + " · " + esc(t.start_time) + "–" + esc(t.end_time) + "</p></div>" + pill + "</div>" +
-    (t.description ? '<p class="tdesc">' + esc(t.description) + "</p>" : "") + "</div></div>" +
+  var pct = tot.cap ? Math.round(100 * tot.filled / tot.cap) : 0, spots = 0, mine = 0;
+  sl.forEach(function (x) { spots += Math.max(need - taken(t.id + ":" + x.idx), 0); if (S.sel.has(t.id + ":" + x.idx)) mine++; });
+  var pill = (mine ? '<span class="pill ok">' + mine + " selected</span> " : "") +
+    (allFull ? '<span class="pill">Fully booked</span>' : '<span class="pill acc">' + plural(spots, "spot", "spots") + " left</span>");
+  var body = '<div class="task-top">' + (t.image_url ? '<img class="thumb" src="' + esc(t.image_url) + '" alt="" loading="lazy">' : "") +
+    '<div class="task-main">' + (t.description ? '<p class="tdesc" style="margin-top:0">' + esc(t.description) + "</p>" : "") + "</div></div>" +
     '<div class="meter"><i style="width:' + pct + '%"></i></div>' +
-    '<p class="meta">' + fmtH(tot.filled) + " of " + fmtH(tot.cap) + " volunteer-hours filled · " + need + " " + (need === 1 ? "person" : "people") + " needed per slot</p>" +
-    (allFull ? '<p class="meta" style="margin-top:.6rem">Every slot is taken. Please pick another seva.</p>' : '<div class="slots">' + chips + "</div>") + "</article>";
+    '<p class="meta">' + fmtH(tot.filled) + " of " + fmtH(tot.cap) + " volunteer-hours filled · " + need + " " + (need === 1 ? "person" : "people") + " needed per slot · " + plural(spots, "spot", "spots") + " left in total</p>" +
+    (allFull ? '<p class="meta" style="margin-top:.6rem">Every slot is taken. Please pick another seva.</p>' : '<div class="slots">' + chips + "</div>");
+  return foldCard("p:" + t.id, allFull ? "is-full" : "", t.name, fmtDate(t.task_date) + " · " + t.start_time + "–" + t.end_time, pill, body);
 }
 function renderBar() {
   var bar = $("#bar"), n = S.sel.size;
@@ -268,8 +282,9 @@ function renderBar() {
 function curFest() {
   var fs = sortedFests();
   if (!fs.length) return null;
+  if (S.afWant) { var w = fs.find(function (x) { return x.id === S.afWant; }); if (w) { S.af = w.id; S.afWant = null; } }
   var f = fs.find(function (x) { return x.id === S.af; });
-  if (!f) { f = fs.find(function (x) { return !isFinished(x); }) || fs[fs.length - 1]; S.af = f.id; }
+  if (!f) { f = fs.find(function (x) { return !isFinished(x); }) || fs[fs.length - 1]; if (!S.afWant) S.af = f.id; }
   return f;
 }
 function adminView() {
@@ -308,6 +323,7 @@ function overviewTab(f) {
     '<div class="stat"><b>' + full + " / " + tl.length + '</b><span>seva fully staffed</span></div>' +
     '<div class="stat"><b>' + fmtH(cap - filled) + '</b><span>hours still needed</span></div></div>';
   if (!tl.length) return h + '<div class="empty">No seva listed for this festival yet. Add some under "Festivals and seva".</div>';
+  h += foldTools("a", tl.map(function (t) { return t.id; }));
   tl.forEach(function (t) {
     var tot = taskTotals(t), need = +t.needed || 1, p = tot.cap ? Math.round(100 * tot.filled / tot.cap) : 0;
     var pill = tot.over ? '<span class="pill warn">Overbooked</span>' : (tot.cap && tot.filled >= tot.cap ? '<span class="pill ok">Fully staffed</span>' :
@@ -316,9 +332,11 @@ function overviewTab(f) {
       var n = taken(t.id + ":" + s.idx), c = n === 0 ? "" : (n > need ? "over" : (n === need ? "full" : "part"));
       return '<div class="cell ' + c + '"><span class="ct mono">' + fmtT(s.s) + "–" + fmtT(s.e) + '</span><b class="mono">' + n + " / " + need + "</b></div>";
     }).join("");
-    h += '<article class="task"><div class="task-head"><div><h3>' + esc(t.name) + '</h3><p class="when mono">' + esc(fmtDate(t.task_date)) + " · " + esc(t.start_time) + "–" + esc(t.end_time) + "</p></div>" + pill + "</div>" +
-      '<div class="meter' + (tot.over ? " over" : "") + '"><i style="width:' + p + '%"></i></div><p class="meta">' + fmtH(tot.filled) + " of " + fmtH(tot.cap) + " volunteer-hours filled</p>" +
-      '<div class="grid-scroll"><div class="cells">' + cells + "</div></div></article>";
+    var nv = volunteersOf(t).length, side = pill + ' <span class="pill">' + plural(nv, "volunteer", "volunteers") + "</span>";
+    h += foldCard("a:" + t.id, "", t.name, fmtDate(t.task_date) + " · " + t.start_time + "–" + t.end_time, side,
+      (t.description ? '<p class="tdesc" style="margin-top:0">' + esc(t.description) + "</p>" : "") +
+      '<div class="meter' + (tot.over ? " over" : "") + '"><i style="width:' + p + '%"></i></div><p class="meta">' + fmtH(tot.filled) + " of " + fmtH(tot.cap) + " volunteer-hours filled · " + need + " per slot</p>" +
+      '<div class="grid-scroll"><div class="cells">' + cells + "</div></div>");
   });
   return h;
 }
@@ -664,7 +682,7 @@ async function saveFest() {
     d.image_url = await photoValue("ff", old && old.image_url, 1600);
     var r = id ? await sb.from("festivals").update(d).eq("id", id).select().single() : await sb.from("festivals").insert(d).select().single();
     if (r.error) throw r.error;
-    S.af = r.data.id;
+    S.afWant = r.data.id;
     if (!id && addSeva) {
       var ev = EVENTS.find(function (x) { return x.id === tplId; }), rows = [];
       ev.seva.forEach(function (n) {
@@ -783,6 +801,8 @@ document.addEventListener("click", function (ev) {
   if (el.tagName === "SELECT" || (el.tagName === "INPUT" && el.type === "checkbox" && a === "cleanSel")) return;
   if (a === "close") { closeModal(); return; }
   if (a === "mode") { S.mode = el.dataset.mode; render(); return; }
+  if (a === "fold") { var fk = el.dataset.key; if (S.open.has(fk)) S.open.delete(fk); else S.open.add(fk); render(); return; }
+  if (a === "foldAll") { el.dataset.ids.split(",").forEach(function (i) { var k3 = el.dataset.prefix + ":" + i; if (el.dataset.open === "1") S.open.add(k3); else S.open.delete(k3); }); render(); return; }
   if (a === "tab") { S.tab = el.dataset.tab; render(); return; }
   if (a === "pickFest") { S.af = el.dataset.id; render(); return; }
   if (a === "toggle") { var k = el.dataset.key; if (S.sel.has(k)) S.sel.delete(k); else S.sel.add(k); render(); return; }
